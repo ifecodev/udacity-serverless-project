@@ -12,7 +12,8 @@ const logger = createLogger('auth')
 // TODO: Provide a URL that can be used to download a certificate that can be used
 // to verify JWT token signature.
 // To get this URL you need to go to an Auth0 page -> Show Advanced Settings -> Endpoints -> JSON Web Key Set
-const jwksUrl = '...'
+const jwksUrl = 'https://dev-s3es3l6wlkqyk6u6.us.auth0.com/.well-known/jwks.json'
+let cachedCert: string;
 
 export const handler = async (
   event: CustomAuthorizerEvent
@@ -58,10 +59,16 @@ async function verifyToken(authHeader: string): Promise<JwtPayload> {
   const token = getToken(authHeader)
   const jwt: Jwt = decode(token, { complete: true }) as Jwt
 
+
   // TODO: Implement token verification
   // You should implement it similarly to how it was implemented for the exercise for the lesson 5
   // You can read more about how to do this here: https://auth0.com/blog/navigating-rs256-and-jwks/
-  return undefined
+ const cert = await getCertificate(jwt.header.kid);
+ return verify(
+    token,           // Token from an HTTP header to validate
+    cert,            // A certificate copied from Auth0 website
+    { algorithms: ['RS256'] } // We need to specify that we use the RS256 algorithm
+  ) as JwtPayload
 }
 
 function getToken(authHeader: string): string {
@@ -75,3 +82,48 @@ function getToken(authHeader: string): string {
 
   return token
 }
+
+async function getCertificate(kid: string): Promise<string> {
+  if(cachedCert)
+    return cachedCert
+  const res = await Axios.get(jwksUrl
+    , {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+     
+  const jwks = res.data.keys
+  logger.info('fetched jwks', jwks)
+  logger.info(`current kid ${kid}`, kid)
+
+  if (!jwks || !jwks.length) {
+   ('The JWKS endpoint did not contain any keys');
+  }
+
+  const mainKeys = jwks.filter((key) => {
+    return key.use === 'sig'
+    && key.kty === 'RSA'
+    && key.kid  === kid
+    && ((key.x5c && key.x5c.length) || (key.n && key.e))
+  })
+  .map(key => {
+    return { kid: key.kid, nbf: key.nbf, publicKey: getCertPEM(key.x5c[0]) }
+  });
+
+  if (!mainKeys.length) {
+    throw new Error('The JWKS endpoint did not contain any signature verification keys')
+  }
+
+  const mainKey = mainKeys[0]
+
+  cachedCert = mainKey.publicKey
+  return cachedCert
+}
+
+function getCertPEM(x5c: string): string {
+  x5c = x5c.match(/.{1,64}/g).join('\n');
+  x5c = `-----BEGIN CERTIFICATE-----\n${x5c}\n-----END CERTIFICATE-----\n`;
+  return x5c;
+}
+
