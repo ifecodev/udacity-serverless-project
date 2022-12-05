@@ -47,15 +47,16 @@ export class TodosAccess {
   }
 
   async updateTodo(todoUpdate: TodoUpdate, todoId: string,userId: string): Promise<void> {
+    logger.info(`update on userId: ${userId} with item `,todoUpdate)
     await this.docClient.update({
       TableName: this.todosTable,
-      Key: {"todoId": todoId,userId: userId},
-      UpdateExpression: 'set #name = :nam, dueDate = :dueDate, done = :done',
-      ExpressionAttributeNames: {"#name": "name"},
+      Key: {todoId: todoId,userId: userId},
+      UpdateExpression: 'set #name = :nam, dueDate = :dueDate, #done = :don',
+      ExpressionAttributeNames: {"#name": "name","#done" : "done"},
       ExpressionAttributeValues: {
         ':nam': todoUpdate.name,
         ':dueDate': todoUpdate.dueDate,
-        ':done': todoUpdate.done,
+        ':don': todoUpdate.done,
       }
     }).promise()
 
@@ -84,7 +85,7 @@ export class TodosAccess {
 
 function createDynamoDBClient() {
   if (process.env.IS_OFFLINE) {
-    console.log('Creating a local DynamoDB instance')
+    logger.info('Creating a local DynamoDB instance')
     return new XAWS.DynamoDB.DocumentClient({
       region: 'localhost',
       endpoint: 'http://localhost:8000'

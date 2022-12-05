@@ -44,12 +44,12 @@ export async function updateTodo(
   userId: string
 ): Promise<void> {
 
-  logger.info('update itemId: ', todoId)
+  logger.info('update items: ', updatedTodo)
 
   return await todosAccess.updateTodo({
     name: updatedTodo.name,
     dueDate: updatedTodo.dueDate,
-    done: false
+    done: updatedTodo.done
   }, todoId,userId)
 
 }
